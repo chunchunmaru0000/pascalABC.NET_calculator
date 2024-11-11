@@ -279,29 +279,26 @@ type
       if pars.Length = 0 then
         Result := 0.0
       else case func_name.text of
-        'max':
-          case pars.Length of
-            1: Result := pars[0];
-            else Result := Max(pars);
-          end;
-          
-        'min': 
-          case pars.Length of
-            1: Result := pars[0];
-            else Result := Min(pars);
-          end;
-          
-        'sum', 'avg': begin
-          Result := 0;
-          for i := 0 to High(pars) do
-            Result := Result + pars[i];
-          if func_name.text = 'avg' then
-            Result := Result / pars.Length;
-        end;
+        'max': Result := pars.Length = 1 ? pars[0] : Max(pars);
+        'min': Result := pars.Length = 1 ? pars[0] : Min(pars);
+        
+        'sum': Result := pars.Sum();
+        'avg': Result := pars.Average();
         
         'sin': Result := Sin(pars[0]);
         'cos': Result := Cos(pars[0]);
         'tg', 'tan': Result := Tan(pars[0]);
+        
+        // в тз матрицы (NxN),поэтому первым параметром у функции матрицы будет N
+        // далее просто как массив но двумерный сам сложится, если парамеров верное число
+        'diagonal': begin
+          case pars.Length of 
+            1: Result := 0.0;
+            2: Result := pars[1]; 
+            else for i := 1 to pars[0].Trunc() do
+              Result := Result + pars[i + pars[0].Trunc() * (i - 1)];
+          end;
+        end;
           
         else Result := 0.0;
       end;
