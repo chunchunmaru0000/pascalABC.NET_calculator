@@ -2,7 +2,7 @@
   TokenType = (
     SPACE, 
     NUMB, 
-    FUNC, 
+    FUNCT, 
     
     PLUS,
     MINUS,
@@ -14,7 +14,8 @@
     RPAR,
     COMMA,
     
-    EOE
+    EOE,
+    OTHER
   );
   
 
@@ -89,15 +90,15 @@ begin
     end;
     Result := Token.Create(NUMB, buffer);
   end
-  // английские символы любого регистра или _ 
+  // английские символы любого регистра или _, добавил русские, пусть будут
   // либо после первой буквы могут еще и цифры быть, как в названии переменной
-  else if Current() in ['_', 'a'..'z', 'A'..'Z'] then begin
-    while Current() in ['0'..'9', '_', 'a'..'z', 'A'..'Z'] do
+  else if Current() in ['_', 'a'..'z', 'A'..'Z', 'а'..'я', 'А'..'Я', 'ё', 'Ё'] then begin
+    while Current() in ['0'..'9', '_', 'a'..'z', 'A'..'Z', 'а'..'я', 'А'..'Я', 'ё', 'Ё'] do
     begin
       buffer += Current();
       Next();
     end;
-    Result := Token.Create(FUNC, buffer);
+    Result := Token.Create(FUNCT, buffer);
   end
   else case Current() of
       '+':
@@ -127,7 +128,12 @@ begin
       ')':
         begin
           Next();
-          Result := Token.Create(RPAR, ')'); end;
+          Result := Token.Create(RPAR, ')'); end
+      else begin
+        buffer += Current();
+        Next();
+        Result := Token.Create(OTHER, buffer); end;
+      //end;
     end;
 end;
 
@@ -244,6 +250,44 @@ type
     end;
   end;
 
+// тут описывать все функции
+type
+  FunctionExpression = class(IExpression)
+  public
+    func_name: Token;
+    parameters: array of IExpression;
+    
+    constructor(_func_name: Token; _parameters: array of IExpression);
+    begin
+      func_name := _func_name;
+      parameters := _parameters;
+    end;
+    
+    
+    function Evaluated(): real; override;
+    var pars: array of real;
+    begin
+      SetLength(pars, parameters.Length);
+      //Writeln(parameters);
+      for var i: int64 := 0 to High(parameters) do
+        pars[i] := parameters[i].Evaluated();
+      // тут короче вообще все вункции будут просто по названию делать свое дело
+      // но можно и вообще сделать реализацию, где добавить абстрактный класс IFunction
+      // и на каждую функцию иметь свой отдельный класс, но тут просто в калькуляторе это не требуется
+      case func_name.text of
+        'max':
+          case pars.Length of
+            0: Result := 0;
+            1: Result := pars[0];
+            else Result := Max(pars);
+          end;
+        'min': begin
+          Result := Min(pars);
+        end
+        else Result := 0.0;
+      end;
+    end;
+  end;
 
 type
   Parser = class
@@ -329,45 +373,65 @@ type
     function Primary(): IExpression;
     function Unary(): IExpression;
     function Muly(): IExpression;
+    function Addity(): IExpression;
+    function Expression(): IExpression;
   end;
 
 
 function Parser.Primary(): IExpression;
-var curr: Token;
+var 
+  curr: Token;
+  func_name: Token;
+  parameters: array of IExpression;
 begin
   curr := Current();
-  case curr.tokenT of
-    NUMB: Result := NumExpression.Create(curr);
-    
+  if Matching(NUMB) then
+    Result := NumExpression.Create(curr);
+  if Matching(FUNCT) then begin
+    func_name := curr;
+    Consume(LPAR);
+    SetLength(parameters, 1);
+    while not Matching(RPAR) do begin
+      parameters[High(parameters)] := Expression();
+      if Matching(RPAR) then 
+        break
+      else begin
+        Consume(COMMA);
+        SetLength(parameters, parameters.Length + 1);
+      end;
+    end;
+    Result := FunctionExpression.Create(func_name, parameters);
   end;
+    
 end;
 
 
 function Parser.Unary(): IExpression;
 var 
-  curr, last: Token;
-  znak: shortint;
+  curr: Token;
 begin
   curr := Current();
-  last := curr;
-  znak := -1;
-  if Matching(MINUS, PLUS) then begin
-    while true do begin
-      curr := Current();
-      if Matching(MINUS) then begin
-        znak *= -1;
-        last = curr;
-        continue;
-      end;
-      if Matching(PLUS) then begin
-        last = curr;
-        continue;
-      end;
-      break;
-    end;
-    Result := znak < 0 ? UnaryExpression.Create(last, Primary()) : Primary();
-  end;
-  Result := Primary();
+//  last := curr;
+//  znak := -1;
+  if Matching(MINUS, PLUS) then 
+    Result := UnaryExpression.Create(curr, Primary())
+  else
+    Result := Primary();
+  // здесь может быть можно сделать типа --2 будет возвращать 2 и тд
+//    while true do begin
+//      curr := Current();
+//      if Matching(MINUS) then begin
+//        znak *= -1;
+//        last := curr;
+//        continue;
+//      end;
+//      if Matching(PLUS) then begin
+//        last := curr;
+//        continue;
+//      end;
+//      break;
+//    end;
+//    Result := znak < 0 ? UnaryExpression.Create(last, Primary()) : Primary();
 end;
 
 
@@ -389,7 +453,28 @@ begin
 end;
 
 
+function Parser.Addity(): IExpression;
+var 
+  res: IExpression;
+  curr: Token;
+begin
+  res := Muly();
+  while true do begin
+    curr := Current();
+    if Matching(PLUS, MINUS) then begin
+      res := BinaryExpression.Create(res, curr, Muly());
+      continue;
+    end;
+    break;
+  end;
+  Result := res;
+end;
 
+
+function Parser.Expression(): IExpression;
+begin
+  Result := Addity();
+end;
 
 
 var s: string;
@@ -397,8 +482,8 @@ begin
   while true do
   begin
     Readln(s);
-    
-    foreach var _token in Tokenizator.Create(s).Tokenize() do
-      Write(_token.text, '|');
+    //Writeln(Tokenizator.Create(s).Tokenize());
+    //Writeln(Parser.Create(Tokenizator.Create(s).Tokenize()).Addity());
+    Writeln(Parser.Create(Tokenizator.Create(s).Tokenize()).Addity().Evaluated());
   end;
 end.
