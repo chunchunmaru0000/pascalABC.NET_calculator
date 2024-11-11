@@ -267,7 +267,7 @@ type
     function Evaluated(): real; override;
     var 
       pars: array of real;
-      i: int64;
+      i, j: int64;
     begin
       SetLength(pars, parameters.Length);
       //Writeln(parameters);
@@ -276,6 +276,7 @@ type
       // тут короче вообще все вункции будут просто по названию делать свое дело
       // но можно и вообще сделать реализацию, где добавить абстрактный класс IFunction
       // и на каждую функцию иметь свой отдельный класс, но тут просто в калькуляторе это не требуется
+      Result := 0.0;
       if pars.Length = 0 then
         Result := 0.0
       else case func_name.text of
@@ -291,15 +292,31 @@ type
         
         // в тз матрицы (NxN),поэтому первым параметром у функции матрицы будет N
         // далее просто как массив но двумерный сам сложится, если парамеров верное число
-        'diagonal': begin
+        'diagonal', 'd':
           case pars.Length of 
             1: Result := 0.0;
-            2: Result := pars[1]; 
-            else for i := 1 to pars[0].Trunc() do
-              Result := Result + pars[i + pars[0].Trunc() * (i - 1)];
+            2: Result := pars[1];
+            else 
+              for i := 1 to pars[0].Trunc() do
+                Result += pars[i + pars[0].Trunc() * (i - 1)];
           end;
-        end;
-          
+        
+       'upper_secondary_diagonal', 'usd': 
+          case pars.Length of 
+            1: Result := 0.0;
+            2: Result := pars[1];
+            else begin
+              var N: integer := pars[0].Trunc();
+              
+              for i := 0 to N - 1 do
+                for j := i+2 to N do
+                  if i+j <= N+N-2 then begin
+                    //Writeln('i ', i, ';j ', j, '; ', i * N + j);
+                    Result += pars[i * N + j];
+                  end
+            end;
+          end
+            
         else Result := 0.0;
       end;
     end;
@@ -399,11 +416,12 @@ var
   curr: Token;
   func_name: Token;
   parameters: array of IExpression;
+  expr: IExpression;
 begin
   curr := Current();
   if Matching(NUMB) then
     Result := NumExpression.Create(curr);
-  if Matching(FUNCT) then begin
+  else if Matching(FUNCT) then begin
     func_name := curr;
     Consume(LPAR);
     SetLength(parameters, 1);
@@ -417,6 +435,11 @@ begin
       end;
     end;
     Result := FunctionExpression.Create(func_name, parameters);
+  end;
+  else if Matching(LPAR) then begin
+    expr := Expression();
+    Consume(RPAR);
+    Result := expr;
   end;
     
 end;
