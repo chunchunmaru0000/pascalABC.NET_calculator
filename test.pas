@@ -265,25 +265,44 @@ type
     
     
     function Evaluated(): real; override;
-    var pars: array of real;
+    var 
+      pars: array of real;
+      i: int64;
     begin
       SetLength(pars, parameters.Length);
       //Writeln(parameters);
-      for var i: int64 := 0 to High(parameters) do
+      for i := 0 to High(parameters) do
         pars[i] := parameters[i].Evaluated();
       // тут короче вообще все вункции будут просто по названию делать свое дело
       // но можно и вообще сделать реализацию, где добавить абстрактный класс IFunction
       // и на каждую функцию иметь свой отдельный класс, но тут просто в калькуляторе это не требуется
-      case func_name.text of
+      if pars.Length = 0 then
+        Result := 0.0
+      else case func_name.text of
         'max':
           case pars.Length of
-            0: Result := 0;
             1: Result := pars[0];
             else Result := Max(pars);
           end;
-        'min': begin
-          Result := Min(pars);
-        end
+          
+        'min': 
+          case pars.Length of
+            1: Result := pars[0];
+            else Result := Min(pars);
+          end;
+          
+        'sum', 'avg': begin
+          Result := 0;
+          for i := 0 to High(pars) do
+            Result := Result + pars[i];
+          if func_name.text = 'avg' then
+            Result := Result / pars.Length;
+        end;
+        
+        'sin': Result := Sin(pars[0]);
+        'cos': Result := Cos(pars[0]);
+        'tg', 'tan': Result := Tan(pars[0]);
+          
         else Result := 0.0;
       end;
     end;
